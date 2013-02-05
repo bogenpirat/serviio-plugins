@@ -1,0 +1,2 @@
+serviio-plugins
+===============
