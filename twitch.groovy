@@ -51,7 +51,7 @@ class Twitch extends WebResourceUrlExtractor {
 		HttpURLConnection con = (HttpURLConnection) url.openConnection()
 		con.setInstanceFollowRedirects(false)
 		if(con.getResponseCode() % 300 < 100)
-			return con.getHeaderField("Location")
+			return con.getHeaderField("Location").replaceAll("\\?.*", "")
 		else
 			return TWITCH_SWF_URL
 	}
