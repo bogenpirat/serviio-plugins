@@ -13,6 +13,8 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V4 (16.06.2013): worked around bug-inducing twitch swf 
+ *			redirection</li>
  *		<li>V3 (04.02.2013): fixed more escaping, fixed a bug for null-valued
  *			jtv tokens</li>
  *		<li>V2 (03.02.2013): fixed jtv token escaping for serviio linux
@@ -20,13 +22,13 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 3
- *	@author <a href="irc://irc.quakenet.org/sc2.il">bog</a>
+ *	@version 4
+ *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 3
+	final Integer VERSION = 4
 	final String VALID_FEED_URL = /^https?:\/\/(?:[^\.]*.)?(?:twitch|justin)\.tv\/([a-zA-Z0-9_]+).*$/
 	final String TWITCH_API_URL = "http://usher.justin.tv/find/CHANNELNAME.json?type=any&group=&channel_subscription="
 	final String TWITCH_SWF_URL = "http://www.justin.tv/widgets/live_embed_player.swf?channel="
