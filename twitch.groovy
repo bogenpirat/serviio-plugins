@@ -26,7 +26,7 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 5
+ *	@version 6
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
