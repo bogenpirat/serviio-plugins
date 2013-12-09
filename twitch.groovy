@@ -1,4 +1,5 @@
 import java.net.URL;
+import java.net.URLEncoder
 
 import org.serviio.library.metadata.*
 import org.serviio.library.online.*
@@ -13,6 +14,9 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V6 (09.12.2013): added support for displaying mobile streams</li>
+ *		<li>V5 (11.08.2013): worked around some pointless twitch api output,
+ *			fixed a bug with transcoding</li>
  *		<li>V4 (16.06.2013): worked around bug-inducing twitch swf 
  *			redirection</li>
  *		<li>V3 (04.02.2013): fixed more escaping, fixed a bug for null-valued
@@ -22,15 +26,17 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 4
+ *	@version 5
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 4
+	final Integer VERSION = 6
 	final String VALID_FEED_URL = /^https?:\/\/(?:[^\.]*.)?(?:twitch|justin)\.tv\/([a-zA-Z0-9_]+).*$/
 	final String TWITCH_API_URL = "http://usher.justin.tv/find/CHANNELNAME.json?type=any&group=&channel_subscription="
+	final String TWITCH_MOBILE_API_ACCESSTOKEN_URL = "http://api.twitch.tv/api/channels/CHANNELNAME/access_token"
+	final String TWITCH_MOBILE_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/CHANNELNAME.m3u8?token=TOKEN&sig=SIG"
 	final String TWITCH_SWF_URL = "http://www.justin.tv/widgets/live_embed_player.swf?channel="
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
 	
@@ -63,6 +69,9 @@ class Twitch extends WebResourceUrlExtractor {
 	}
 	
 	WebResourceContainer extractItems(URL resourceUrl, int maxItemsToRetrieve) {
+		////////////////////////////
+		// REGULAR RTMP INTERFACE //
+		////////////////////////////
 		// let's set some required variables
 		def channelName = (String) (resourceUrl =~ VALID_FEED_URL)[0][1] // extract channel name from url
 		def live = 1 // for ffmpeg rtmp parameters
@@ -78,6 +87,8 @@ class Twitch extends WebResourceUrlExtractor {
 			json.each {
 				// it.connect is "rtmp://someip/app", so it already includes the "app" parameter
 				def rtmp = it.connect
+				if(rtmp == null || !rtmp.startsWith("rtmp"))
+					return // likely not what we want
 				def playpath = it.play
 				def jtv
 				def expiration
@@ -102,8 +113,39 @@ class Twitch extends WebResourceUrlExtractor {
 					expiresImmediately: true,
 					cacheKey: title,
 					// required parameters: rtmp-url, playpath, swfUrl/Vfy, live, jtv (CDN servers don't need this)
-					rtmpUrl: rtmp + " playpath=" + playpath + " swfUrl=" + swfUrl + " swfVfy=1" + ((rtmp ==~ /.*\d+\.\d+\.\d+\.\d+.*/)? " jtv=" + jtv : "") + " live=" + live ])
+					rtmpUrl: "\"" + rtmp + " playpath=" + playpath + " swfUrl=" + swfUrl + " swfVfy=1" + ((rtmp ==~ /.*\d+\.\d+\.\d+\.\d+.*/)? " jtv=" + jtv : "") + " live=" + live + "\"" ])
 			}
+		
+			
+		//////////////////////////
+		// MOBILE HLS INTERFACE //
+		//////////////////////////
+		// grab and parse the api output and isolate the items
+		jsonText = new URL(TWITCH_MOBILE_API_ACCESSTOKEN_URL.replaceAll("CHANNELNAME", channelName.toLowerCase())).text
+		json = new JsonSlurper().parseText(jsonText)
+		
+		// if this is true, then the access_token results are present
+		if(json.containsKey("sig")&& json.containsKey("token")) {
+			def sig = json.sig
+			def token = json.token
+			def playlist = new URL(TWITCH_MOBILE_API_PLAYLIST_URL.
+				replaceAll("CHANNELNAME", channelName.toLowerCase()).
+				replaceAll("TOKEN", URLEncoder.encode(token, "UTF-8")).
+				replaceAll("SIG", sig)
+				).text
+			
+			def m = playlist =~ /(?s)NAME="([^"]*)".*?(http:\/\/.+?)[\n\r]/
+			
+			while(m.find()) {
+				// a generic string should be enough for identifying purposes
+				def title = channelName + "-mobile" + " [${m.group(1)}]"
+				items += new WebResourceItem(title: title, additionalInfo: [ 
+					expiresImmediately: true,
+					cacheKey: title,
+					// required parameters: rtmp-url, playpath, swfUrl/Vfy, live, jtv (CDN servers don't need this)
+					rtmpUrl: m.group(2) ])
+			}
+		}
 		
 		// create and fill the container
 		def container = new WebResourceContainer()
@@ -127,9 +169,10 @@ class Twitch extends WebResourceUrlExtractor {
 	static void main(args) {
 		Twitch twitch = new Twitch()
 
-		def items = twitch.extractItems(new URL("http://www.twitch.tv/"+args[0]), 123)
-		ContentURLContainer result = twitch.extractUrl(items.getItems()[0], PreferredQuality.HIGH)
-		println result
+		twitch.extractItems(new URL("http://www.twitch.tv/"+args[0]), 123).getItems().each { it->
+			ContentURLContainer result = twitch.extractUrl(it, PreferredQuality.HIGH)
+			println result
+		}
 	}
 }
 
