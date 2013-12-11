@@ -36,7 +36,7 @@ class Twitch extends WebResourceUrlExtractor {
 	final String VALID_FEED_URL = /^https?:\/\/(?:[^\.]*.)?(?:twitch|justin)\.tv\/([a-zA-Z0-9_]+).*$/
 	final String TWITCH_API_URL = "http://usher.justin.tv/find/CHANNELNAME.json?type=any&group=&channel_subscription="
 	final String TWITCH_MOBILE_API_ACCESSTOKEN_URL = "http://api.twitch.tv/api/channels/CHANNELNAME/access_token"
-	final String TWITCH_MOBILE_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/CHANNELNAME.m3u8?token=TOKEN&sig=SIG"
+	final String TWITCH_MOBILE_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/CHANNELNAME.m3u8?token=TOKEN&sig=SIG&allow_source=true"
 	final String TWITCH_SWF_URL = "http://www.justin.tv/widgets/live_embed_player.swf?channel="
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
 	
