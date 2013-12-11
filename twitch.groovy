@@ -14,6 +14,7 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V7 (11.12.2013): changed mobile stream grabber to also get source quality</li>
  *		<li>V6 (09.12.2013): added support for displaying mobile streams</li>
  *		<li>V5 (11.08.2013): worked around some pointless twitch api output,
  *			fixed a bug with transcoding</li>
@@ -26,13 +27,13 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 6
+ *	@version 7
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 6
+	final Integer VERSION = 7
 	final String VALID_FEED_URL = /^https?:\/\/(?:[^\.]*.)?(?:twitch|justin)\.tv\/([a-zA-Z0-9_]+).*$/
 	final String TWITCH_API_URL = "http://usher.justin.tv/find/CHANNELNAME.json?type=any&group=&channel_subscription="
 	final String TWITCH_MOBILE_API_ACCESSTOKEN_URL = "http://api.twitch.tv/api/channels/CHANNELNAME/access_token"
