@@ -14,7 +14,8 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
- *		<li>V7 (11.12.2013): changed mobile stream grabber to also get source quality</li>
+ *		<li>V7 (11.12.2013): changed mobile stream grabber to also get source 
+ *			quality</li>
  *		<li>V6 (09.12.2013): added support for displaying mobile streams</li>
  *		<li>V5 (11.08.2013): worked around some pointless twitch api output,
  *			fixed a bug with transcoding</li>
@@ -36,9 +37,8 @@ class Twitch extends WebResourceUrlExtractor {
 	final Integer VERSION = 7
 	final String VALID_FEED_URL = /^https?:\/\/(?:[^\.]*.)?(?:twitch|justin)\.tv\/([a-zA-Z0-9_]+).*$/
 	final String TWITCH_API_URL = "http://usher.justin.tv/find/CHANNELNAME.json?type=any&group=&channel_subscription="
-	final String TWITCH_MOBILE_API_ACCESSTOKEN_URL = "http://api.twitch.tv/api/channels/CHANNELNAME/access_token"
-	final String TWITCH_MOBILE_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/CHANNELNAME.m3u8?token=TOKEN&sig=SIG&allow_source=true"
-	final String TWITCH_SWF_URL = "http://www.justin.tv/widgets/live_embed_player.swf?channel="
+	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/CHANNELNAME.json?allow_source=true&nauthsig=&nauth=&type=any"
+	final String TWITCH_SWF_URL = "http://www.justin.tv/swflibs/JustinPlayer.swf?channel="
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
 	
 	int getVersion() {
@@ -114,39 +114,27 @@ class Twitch extends WebResourceUrlExtractor {
 					expiresImmediately: true,
 					cacheKey: title,
 					// required parameters: rtmp-url, playpath, swfUrl/Vfy, live, jtv (CDN servers don't need this)
-					rtmpUrl: "\"" + rtmp + " playpath=" + playpath + " swfUrl=" + swfUrl + " swfVfy=1" + ((rtmp ==~ /.*\d+\.\d+\.\d+\.\d+.*/)? " jtv=" + jtv : "") + " live=" + live + "\"" ])
+					rtmpUrl: rtmp + " playpath=" + playpath + " swfUrl=" + swfUrl + " swfVfy=1" + ((rtmp ==~ /.*\d+\.\d+\.\d+\.\d+.*/)? " jtv=" + jtv : "") + " live=" + live ])
 			}
 		
 			
 		//////////////////////////
 		// MOBILE HLS INTERFACE //
 		//////////////////////////
-		// grab and parse the api output and isolate the items
-		jsonText = new URL(TWITCH_MOBILE_API_ACCESSTOKEN_URL.replaceAll("CHANNELNAME", channelName.toLowerCase())).text
-		json = new JsonSlurper().parseText(jsonText)
+		def playlist = new URL(TWITCH_HLS_API_PLAYLIST_URL.
+			replaceAll("CHANNELNAME", channelName.toLowerCase())).text
 		
-		// if this is true, then the access_token results are present
-		if(json.containsKey("sig")&& json.containsKey("token")) {
-			def sig = json.sig
-			def token = json.token
-			def playlist = new URL(TWITCH_MOBILE_API_PLAYLIST_URL.
-				replaceAll("CHANNELNAME", channelName.toLowerCase()).
-				replaceAll("TOKEN", URLEncoder.encode(token, "UTF-8")).
-				replaceAll("SIG", sig)
-				).text
-			
-			def m = playlist =~ /(?s)NAME="([^"]*)".*?(http:\/\/.+?)[\n\r]/
-			
-			while(m.find()) {
-				// a generic string should be enough for identifying purposes
-				def title = channelName + "-mobile" + " [${m.group(1)}]"
-				items += new WebResourceItem(title: title, additionalInfo: [ 
-					expiresImmediately: true,
-					cacheKey: title,
-					// required parameters: rtmp-url, playpath, swfUrl/Vfy, live, jtv (CDN servers don't need this)
-					rtmpUrl: m.group(2) ])
-			}
+		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
+		
+		while(m.find()) {
+			// a generic string should be enough for identifying purposes
+			def title = channelName + "-hls" + " [${m.group(1)}/${(Float.parseFloat(m.group(2))/1024) as Integer}K]"
+			items += new WebResourceItem(title: title, additionalInfo: [ 
+				expiresImmediately: true,
+				cacheKey: title,
+				rtmpUrl: m.group(3) ])
 		}
+		
 		
 		// create and fill the container
 		def container = new WebResourceContainer()
