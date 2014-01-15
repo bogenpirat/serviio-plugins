@@ -112,10 +112,12 @@ class Twitch extends WebResourceUrlExtractor {
 		def items = []
 		segments.each { quality, val ->
 			def concatUrls = val.join("|")
+			def myUrl = isWindows ? "\"concat:${concatUrls}\"" : "concat:${concatUrls}"
+			
 			items += new WebResourceItem(title: "[${quality}] " + title, additionalInfo: [
 				expiresImmediately: true,
 				cacheKey: title,
-				url: "\"concat:${concatUrls}\"" ])
+				url: myUrl ])
 		}
 		
 		return items
@@ -143,10 +145,10 @@ class Twitch extends WebResourceUrlExtractor {
 	ContentURLContainer extractUrl(WebResourceItem arg0, PreferredQuality arg1) {
 		def c = new ContentURLContainer()
 		if(arg0 != null) {
-			c.setExpiresImmediately(arg0.additionalInfo.url.startsWith("\"concat:") ? false : true)
+			c.setExpiresImmediately(arg0.additionalInfo.url.indexOf("concat:") != -1 ? false : true)
 			c.setCacheKey(arg0.additionalInfo.cacheKey)
 			c.setContentUrl(arg0.additionalInfo.url)
-			c.setLive(arg0.additionalInfo.url.startsWith("\"concat:") ? false : true)
+			c.setLive(arg0.additionalInfo.url.indexOf("concat:") != -1 ? false : true)
 		}
 		return c
 	}
