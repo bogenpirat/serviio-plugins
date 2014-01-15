@@ -14,6 +14,7 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V10 (15.01.2014): added support for VODs.</li>
  *		<li>V9 (20.12.2013): removed RTMP streams since they are now disabled
  *			and will likely be defunct forever.</li>
  *		<li>V8 (14.12.2013): simplified HLS/mobile grabbing, fixed a bug from
@@ -32,15 +33,18 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 9
+ *	@version 10
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 9
-	final String VALID_FEED_URL = /^https?:\/\/(?:[^\.]*.)?(?:twitch|justin)\.tv\/([a-zA-Z0-9_]+).*$/ // TODO
-	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/CHANNELNAME.json?allow_source=true&nauthsig=&nauth=&type=any"
+	final Integer VERSION = 10
+	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+).*\$"
+	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
+	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/%s.json?allow_source=true&nauthsig=&nauth=&type=any"
+	final String TWITCH_VOD_API_URL = "http://api.justin.tv/api/broadcast/by_archive/%d.json?onsite=true"
+	final String TWITCH_VODID_CDATA_STRING = "PP\\.archive_id = \"(\\d+)\";"
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
 	
 	int getVersion() {
@@ -52,47 +56,97 @@ class Twitch extends WebResourceUrlExtractor {
 	}
 
 	boolean extractorMatches(URL feedUrl) {
-		return feedUrl ==~ VALID_FEED_URL
+		return (feedUrl ==~ VALID_FEED_URL) || (feedUrl ==~ VALID_VOD_URL)
 	}
 	
 	WebResourceContainer extractItems(URL resourceUrl, int maxItemsToRetrieve) {
+		def items, title
 		def channelName = (String) (resourceUrl =~ VALID_FEED_URL)[0][1] // extract channel name from url
 		
+		if(resourceUrl ==~ VALID_VOD_URL) {
+			def urlKind = (resourceUrl =~ VALID_VOD_URL)[0][2] // "b" or "c"
+			def vodId 
+			
+			if(urlKind.equals("b")) {
+				vodId = (resourceUrl =~ VALID_VOD_URL)[0][3] as Integer
+			} else if(urlKind.equals("c")) {
+				vodId = (resourceUrl.text =~ TWITCH_VODID_CDATA_STRING)[0][1] as Integer
+			}
+			
+			title = "${channelName} VOD ${vodId}"
+			items = extractVods(vodId)
+		} else if(resourceUrl ==~ VALID_FEED_URL) { // it's a stream
+			title = "${channelName} Stream"
+			items = extractHlsStream(channelName)
+		}
+		
+		// create and fill the container
+		def container = new WebResourceContainer()
+		container.setTitle(title)
+		container.setItems(items)
+		
+		return container
+	}
+	
+	List<WebResourceItem> extractVods(Integer vodId) {
+		def json = new JsonSlurper().parseText(new URL(String.format(TWITCH_VOD_API_URL, vodId)).text)
+		def title
+		
+		// collect segment data first
+		def segments = [ "Source": [] ]
+		for(def jsonSegment : json) {
+			title = jsonSegment["title"] // always the same, but too lazy to have it stop after the first assignment
+			segments["Source"] << jsonSegment["video_file_url"]
+			for(def transcodeSegment : jsonSegment["transcode_file_urls"].entrySet()) {
+				def qualityName = (transcodeSegment.getKey() =~ /transcode_(.+)/)[0][1]
+				def segmentUrl = transcodeSegment.getValue()
+				
+				if(!segments.containsKey(qualityName))
+					segments[qualityName] = []
+				
+				segments[qualityName] << segmentUrl
+			}
+		}
+		
+		// assemble webresourceitem list
+		def items = []
+		segments.each { quality, val ->
+			def concatUrls = val.join("|")
+			items += new WebResourceItem(title: "[${quality}] " + title, additionalInfo: [
+				expiresImmediately: true,
+				cacheKey: title,
+				url: "\"concat:${concatUrls}\"" ])
+		}
+		
+		return items
+	}
+	
+	List<WebResourceItem> extractHlsStream(String channelName) {
 		def items = [] // prepare list
 		
-		/////////////////////////
-		// HLS VIDEO INTERFACE //
-		/////////////////////////
-		def playlist = new URL(TWITCH_HLS_API_PLAYLIST_URL.
-			replaceAll("CHANNELNAME", channelName.toLowerCase())).text
+		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase())).text
 		
 		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
 		
 		while(m.find()) {
 			// a generic string should be enough for identifying purposes
 			def title = channelName + "-hls" + " [${m.group(1)}/${(Float.parseFloat(m.group(2))/1024) as Integer}K]"
-			items += new WebResourceItem(title: title, additionalInfo: [ 
+			items += new WebResourceItem(title: title, additionalInfo: [
 				expiresImmediately: true,
 				cacheKey: title,
 				url: m.group(3) ])
 		}
 		
-		
-		// create and fill the container
-		def container = new WebResourceContainer()
-		container.setTitle(channelName)
-		container.setItems(items)
-		
-		return container
+		return items
 	}
 
 	ContentURLContainer extractUrl(WebResourceItem arg0, PreferredQuality arg1) {
 		def c = new ContentURLContainer()
 		if(arg0 != null) {
-			c.setExpiresImmediately(true)
+			c.setExpiresImmediately(arg0.additionalInfo.url.startsWith("\"concat:") ? false : true)
 			c.setCacheKey(arg0.additionalInfo.cacheKey)
 			c.setContentUrl(arg0.additionalInfo.url)
-			c.setLive(true)
+			c.setLive(arg0.additionalInfo.url.startsWith("\"concat:") ? false : true)
 		}
 		return c
 	}
