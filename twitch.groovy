@@ -14,6 +14,7 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V11 (24.01.2014): fixed stream grabbing.</li>
  *		<li>V10 (15.01.2014): added support for VODs.</li>
  *		<li>V9 (20.12.2013): removed RTMP streams since they are now disabled
  *			and will likely be defunct forever.</li>
@@ -33,17 +34,18 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 10
+ *	@version 11
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 10
+	final Integer VERSION = 11
 	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+).*\$"
 	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
-	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/%s.json?allow_source=true&nauthsig=&nauth=&type=any"
+	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/%s.m3u8?token=%s&sig=%s&allow_source=true"
 	final String TWITCH_VOD_API_URL = "http://api.justin.tv/api/broadcast/by_archive/%d.json?onsite=true"
+	final String TWITCH_ACCESSTOKEN_API = "http://api.twitch.tv/api/channels/%s/access_token"
 	final String TWITCH_VODID_CDATA_STRING = "PP\\.archive_id = \"(\\d+)\";"
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
 	
@@ -126,7 +128,11 @@ class Twitch extends WebResourceUrlExtractor {
 	List<WebResourceItem> extractHlsStream(String channelName) {
 		def items = [] // prepare list
 		
-		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase())).text
+		def tokenJson = new JsonSlurper().parseText(new URL(String.format(TWITCH_ACCESSTOKEN_API, channelName.toLowerCase())).text)
+		def token = tokenJson.token
+		def sig = tokenJson.sig
+		
+		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), token, sig)).text
 		
 		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
 		
