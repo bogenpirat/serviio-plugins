@@ -14,7 +14,7 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
- *		<li>V11 (22.09.2014): fixed VODs; now displaying as segments.</li>
+ *		<li>V12 (22.09.2014): fixed VODs; now displaying as segments.</li>
  *		<li>V11 (24.01.2014): fixed stream grabbing.</li>
  *		<li>V10 (15.01.2014): added support for VODs.</li>
  *		<li>V9 (20.12.2013): removed RTMP streams since they are now disabled
