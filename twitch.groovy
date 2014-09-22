@@ -14,6 +14,7 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V11 (22.09.2014): fixed VODs; now displaying as segments.</li>
  *		<li>V11 (24.01.2014): fixed stream grabbing.</li>
  *		<li>V10 (15.01.2014): added support for VODs.</li>
  *		<li>V9 (20.12.2013): removed RTMP streams since they are now disabled
@@ -34,13 +35,13 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 11
+ *	@version 12
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 11
+	final Integer VERSION = 12
 	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+).*\$"
 	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
 	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/%s.m3u8?token=%s&sig=%s&allow_source=true"
@@ -67,7 +68,7 @@ class Twitch extends WebResourceUrlExtractor {
 		
 		if(resourceUrl ==~ VALID_VOD_URL) {
 			def urlKind = (resourceUrl =~ VALID_VOD_URL)[0][2] // "b" or "c"
-			def vodId 
+			def vodId
 			
 			if(urlKind.equals("b")) {
 				vodId = (resourceUrl =~ VALID_VOD_URL)[0][3] as Integer
@@ -113,13 +114,14 @@ class Twitch extends WebResourceUrlExtractor {
 		// assemble webresourceitem list
 		def items = []
 		segments.each { quality, val ->
-			def concatUrls = val.join("|")
-			def myUrl = isWindows ? "\"concat:${concatUrls}\"" : "concat:${concatUrls}"
-			
-			items += new WebResourceItem(title: "[${quality}] " + title, additionalInfo: [
-				expiresImmediately: true,
-				cacheKey: title,
-				url: myUrl ])
+			def ptNr = 1
+			val.each { segment ->
+				items += new WebResourceItem(title: "[${quality}, ${ptNr}/${val.size()}] " + title, additionalInfo: [
+					expiresImmediately: false,
+					cacheKey: title,
+					url: segment ])
+				ptNr++
+			}
 		}
 		
 		return items
@@ -161,8 +163,14 @@ class Twitch extends WebResourceUrlExtractor {
 
 	static void main(args) {
 		Twitch twitch = new Twitch()
+		def url = ""
 
-		twitch.extractItems(new URL("http://www.twitch.tv/"+args[0]), 123).getItems().each { it->
+		if(!args[0].contains("http"))
+			url = "http://www.twitch.tv/" + args[0]
+		else
+			url = args[0]
+		
+		twitch.extractItems(new URL(url), 123).getItems().each { it->
 			ContentURLContainer result = twitch.extractUrl(it, PreferredQuality.HIGH)
 			println result
 		}
