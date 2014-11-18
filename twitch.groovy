@@ -42,11 +42,12 @@ import groovy.json.*
 
 class Twitch extends WebResourceUrlExtractor {
 	final Integer VERSION = 12
-	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+).*\$"
-	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?(?:twitch|justin)\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
-	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.justin.tv/api/channel/hls/%s.m3u8?token=%s&sig=%s&allow_source=true"
+	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+).*\$"
+	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
+	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/%s.json?nauthsig=%s&nauth=%s&allow_source=true"
 	final String TWITCH_VOD_API_URL = "http://api.justin.tv/api/broadcast/by_archive/%d.json?onsite=true"
 	final String TWITCH_ACCESSTOKEN_API = "http://api.twitch.tv/api/channels/%s/access_token"
+	final String TWITCH_STREAM_API = "https://api.twitch.tv/kraken/streams/%s"
 	final String TWITCH_VODID_CDATA_STRING = "PP\\.archive_id = \"(\\d+)\";"
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
 	
@@ -134,7 +135,14 @@ class Twitch extends WebResourceUrlExtractor {
 		def token = tokenJson.token
 		def sig = tokenJson.sig
 		
-		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), token, sig)).text
+		//getting stream thubnail
+		def streamJson = new JsonSlurper().parseText(new URL(String.format(TWITCH_STREAM_API, channelName.toLowerCase())).text)
+		def thumbnailUrl
+		if (streamJson.stream) {
+			thumbnailUrl = streamJson.stream.preview.medium
+		}
+		
+		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), sig, token)).text
 		
 		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
 		
@@ -144,7 +152,8 @@ class Twitch extends WebResourceUrlExtractor {
 			items += new WebResourceItem(title: title, additionalInfo: [
 				expiresImmediately: true,
 				cacheKey: title,
-				url: m.group(3) ])
+				url: m.group(3),
+				thumbnailUrl: thumbnailUrl ])
 		}
 		
 		return items
@@ -157,6 +166,7 @@ class Twitch extends WebResourceUrlExtractor {
 			c.setCacheKey(arg0.additionalInfo.cacheKey)
 			c.setContentUrl(arg0.additionalInfo.url)
 			c.setLive(arg0.additionalInfo.url.indexOf("concat:") != -1 ? false : true)
+			c.setThumbnailUrl(arg0.additionalInfo.thumbnailUrl)
 		}
 		return c
 	}
@@ -176,4 +186,3 @@ class Twitch extends WebResourceUrlExtractor {
 		}
 	}
 }
-
