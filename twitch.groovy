@@ -45,12 +45,12 @@ class Twitch extends WebResourceUrlExtractor {
 	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+).*\$"
 	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
 	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/%s.json?nauthsig=%s&nauth=%s&allow_source=true"
-	final String TWITCH_VOD_API_URL = "http://api.justin.tv/api/broadcast/by_archive/%d.json?onsite=true"
+	final String TWITCH_VOD_API_URL = "https://api.twitch.tv/api/videos/%s%s"
+	final String TWITCH_VOD_API_INFO = "https://api.twitch.tv/kraken/videos/%s%s"
 	final String TWITCH_ACCESSTOKEN_API = "http://api.twitch.tv/api/channels/%s/access_token"
 	final String TWITCH_STREAM_API = "https://api.twitch.tv/kraken/streams/%s"
-	final String TWITCH_VODID_CDATA_STRING = "PP\\.archive_id = \"(\\d+)\";"
 	final static Boolean isWindows = System.getProperty("os.name").startsWith("Windows");
-	
+
 	int getVersion() {
 		return VERSION
 	}
@@ -70,15 +70,9 @@ class Twitch extends WebResourceUrlExtractor {
 		if(resourceUrl ==~ VALID_VOD_URL) {
 			def urlKind = (resourceUrl =~ VALID_VOD_URL)[0][2] // "b" or "c"
 			def vodId
-			
-			if(urlKind.equals("b")) {
-				vodId = (resourceUrl =~ VALID_VOD_URL)[0][3] as Integer
-			} else if(urlKind.equals("c")) {
-				vodId = (resourceUrl.text =~ TWITCH_VODID_CDATA_STRING)[0][1] as Integer
-			}
-			
+			vodId = (resourceUrl =~ VALID_VOD_URL)[0][3] as Integer
 			title = "${channelName} VOD ${vodId}"
-			items = extractVods(vodId)
+			items = extractVods(vodId, urlKind)
 		} else if(resourceUrl ==~ VALID_FEED_URL) { // it's a stream
 			title = "${channelName} Stream"
 			items = extractHlsStream(channelName)
@@ -92,39 +86,34 @@ class Twitch extends WebResourceUrlExtractor {
 		return container
 	}
 	
-	List<WebResourceItem> extractVods(Integer vodId) {
-		def json = new JsonSlurper().parseText(new URL(String.format(TWITCH_VOD_API_URL, vodId)).text)
-		def title
-		
-		// collect segment data first
-		def segments = [ "Source": [] ]
-		for(def jsonSegment : json) {
-			title = jsonSegment["title"] // always the same, but too lazy to have it stop after the first assignment
-			segments["Source"] << jsonSegment["video_file_url"]
-			for(def transcodeSegment : jsonSegment["transcode_file_urls"].entrySet()) {
-				def qualityName = (transcodeSegment.getKey() =~ /transcode_(.+)/)[0][1]
-				def segmentUrl = transcodeSegment.getValue()
-				
-				if(!segments.containsKey(qualityName))
-					segments[qualityName] = []
-				
-				segments[qualityName] << segmentUrl
-			}
+	List<WebResourceItem> extractVods(Integer vodId, String urlKind) {
+		def type
+		// type can be 'b' or 'a' depending on urlKind
+		if (urlKind == "b") {
+			type = "a"
+		} else {
+			type = "c"
 		}
+		def info = new JsonSlurper().parseText(new URL(String.format(TWITCH_VOD_API_INFO, type, vodId)).text)
+		def title = info.title
+		def preview = info.preview
 		
-		// assemble webresourceitem list
+		def json = new JsonSlurper().parseText(new URL(String.format(TWITCH_VOD_API_URL, type, vodId)).text)
+		
 		def items = []
-		segments.each { quality, val ->
+		json.chunks.each { chunk, part ->
 			def ptNr = 1
-			val.each { segment ->
-				items += new WebResourceItem(title: "[${quality}, ${ptNr}/${val.size()}] " + title, additionalInfo: [
-					expiresImmediately: false,
-					cacheKey: title,
-					url: segment ])
+			part.each { data ->
+				items += new WebResourceItem(title: "[${chunk}, ${ptNr}/${part.size()}] " + title, additionalInfo: [
+				expiresImmediately: false,
+				cacheKey: title,
+				url: data.url,
+				thumbnailUrl: preview,
+				live: false
+				])
 				ptNr++
 			}
-		}
-		
+		}		
 		return items
 	}
 	
@@ -153,7 +142,9 @@ class Twitch extends WebResourceUrlExtractor {
 				expiresImmediately: true,
 				cacheKey: title,
 				url: m.group(3),
-				thumbnailUrl: thumbnailUrl ])
+				thumbnailUrl: thumbnailUrl,
+				live: true
+				])
 		}
 		
 		return items
@@ -162,10 +153,10 @@ class Twitch extends WebResourceUrlExtractor {
 	ContentURLContainer extractUrl(WebResourceItem arg0, PreferredQuality arg1) {
 		def c = new ContentURLContainer()
 		if(arg0 != null) {
-			c.setExpiresImmediately(arg0.additionalInfo.url.indexOf("concat:") != -1 ? false : true)
+			c.setExpiresImmediately(arg0.additionalInfo.expiresImmediately)
 			c.setCacheKey(arg0.additionalInfo.cacheKey)
 			c.setContentUrl(arg0.additionalInfo.url)
-			c.setLive(arg0.additionalInfo.url.indexOf("concat:") != -1 ? false : true)
+			c.setLive(arg0.additionalInfo.live)
 			c.setThumbnailUrl(arg0.additionalInfo.thumbnailUrl)
 		}
 		return c
