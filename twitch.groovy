@@ -14,6 +14,9 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V14 (18.12.2014): even newer API urls (Author: ivanmalm)</li>
+ *		<li>V13 (02.12.2014): newer api urls used, vod extraction fixed
+ *			(courtesy of commandercool).</li>
  *		<li>V12 (22.09.2014): fixed VODs; now displaying as segments.</li>
  *		<li>V11 (24.01.2014): fixed stream grabbing.</li>
  *		<li>V10 (15.01.2014): added support for VODs.</li>
@@ -35,16 +38,16 @@ import groovy.json.*
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
  *
- *	@version 12
+ *	@version 14
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
  *
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final Integer VERSION = 12
+	final Integer VERSION = 14
 	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+).*\$"
 	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
-	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/select/%s.json?nauthsig=%s&nauth=%s&allow_source=true"
+	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/api/channel/hls/%s.m3u8?sig=%s&token=%s&allow_source=true"
 	final String TWITCH_VOD_API_URL = "https://api.twitch.tv/api/videos/%s%s"
 	final String TWITCH_VOD_API_INFO = "https://api.twitch.tv/kraken/videos/%s%s"
 	final String TWITCH_ACCESSTOKEN_API = "http://api.twitch.tv/api/channels/%s/access_token"
