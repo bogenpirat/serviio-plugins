@@ -50,7 +50,7 @@ class Twitch extends WebResourceUrlExtractor {
 	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+).*\$"
 	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
 	final String VALID_HLS_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/v/(\\d+)[^\\d]*\$"
-	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/api/channel/hls/%s.m3u8?sig=%s&token=%s&allow_source=true"
+	final String TWITCH_HLS_API_PLAYLIST_URL = "https://usher.twitch.tv/api/channel/hls/%s.m3u8?sig=%s&token=%s&allow_source=true"
 	final String TWITCH_VOD_API_URL = "https://api.twitch.tv/api/videos/%s%s"
 	final String TWITCH_HLS_VOD_API_URL = "https://usher.twitch.tv/vod/%s?nauth=%s&nauthsig=%s"
 	final String TWITCH_VOD_API_INFO = "https://api.twitch.tv/kraken/videos/%s%s"
