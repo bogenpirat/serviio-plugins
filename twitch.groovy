@@ -182,7 +182,7 @@ class Twitch extends WebResourceUrlExtractor {
 			thumbnailUrl = streamJson.stream.preview.medium
 		}
 		
-		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), auth.sig, auth.token)).text
+		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), URLEncoder.encode(auth.sig), URLEncoder.encode(auth.token))).text
 		
 		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
 		
