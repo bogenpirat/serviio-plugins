@@ -14,6 +14,7 @@ import groovy.json.*
  *
  *	<h2>VERSION HISTORY</h2>
  *	<p><ul>
+ *		<li>V18 (16.02.2021): updated for new APIs</li>
  *		<li>V17 (15.09.2016): some API calls now require a Client ID field</li>
  *		<li>V16 (02.04.2016): urls are now https only - fixed</li>
  *		<li>V15 (04.02.2015): added support for /v/ vods</li>
@@ -40,19 +41,6 @@ import groovy.json.*
  *			installations</li>
  *		<li>V1 (03.02.2013): initial release</li>
  *	</ul></p>
- *	
- *	<h2>LICENSING</h2>
- *	    This program is free software: you can redistribute it and/or modify
- *	    it under the terms of the GNU Lesser General Public License v3 as 
- *	    published by the Free Software Foundation.
- *	
- *	    This program is distributed in the hope that it will be useful,
- *	    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *	    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *	    GNU Lesser General Public License (v3) for more details.
- *	
- *	    For a copy of the GNU Lesser General Public License, see 
- *	    <https://www.gnu.org/licenses/lgpl.txt>.
  *
  *	@version 17
  *	@author <a href="https://twitter.com/bogenpirat">bog</a>
@@ -60,18 +48,43 @@ import groovy.json.*
  */
 
 class Twitch extends WebResourceUrlExtractor {
-	final String CLIENT_ID = "jzkbprff40iqj646a697cyrvl0zt2m6"
-	final Integer VERSION = 17
+	final String CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"
+	final String CLIENT_ID_API = "hssx1bgogbpcukaz4xf2g18syu2ied"
+	final String OAUTH_TOKEN = "qu8nj7ez1nm3189tpspqciev8lyk3t"
+	final Integer VERSION = 18
 	final String VALID_FEED_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+).*\$"
-	final String VALID_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/(b|c)/(\\d+)[^\\d]*\$"
-	final String VALID_HLS_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/([a-zA-Z0-9_]+)/v/(\\d+)[^\\d]*\$"
+	final String VALID_HLS_VOD_URL = "^https?://(?:[^\\.]*.)?twitch\\.tv/videos/(\\d+)[^\\d]*\$"
 	final String TWITCH_HLS_API_PLAYLIST_URL = "http://usher.twitch.tv/api/channel/hls/%s.m3u8?sig=%s&token=%s&allow_source=true"
 	final String TWITCH_VOD_API_URL = "https://api.twitch.tv/api/videos/%s%s?client_id=${CLIENT_ID}"
-	final String TWITCH_HLS_VOD_API_URL = "http://usher.twitch.tv/vod/%s?nauth=%s&nauthsig=%s"
-	final String TWITCH_VOD_API_INFO = "https://api.twitch.tv/kraken/videos/%s%s?client_id=${CLIENT_ID}"
-	final String TWITCH_ACCESSTOKEN_API = "https://api.twitch.tv/api/channels/%s/access_token?client_id=${CLIENT_ID}"
+	final String TWITCH_HLS_VOD_API_URL = "https://usher.ttvnw.net/vod/%s.m3u8?allow_source=true&sig=%s&supported_codecs=avc1&token=%s&cdm=wv"
+	final String TWITCH_VOD_API_INFO = "https://api.twitch.tv/helix/videos?id=%s"
+	final String TWITCH_GQL_API = "https://gql.twitch.tv/gql"
 	final String TWITCH_HLSVOD_ACCESSTOKEN_API = "https://api.twitch.tv/api/vods/%s/access_token?as3=t&client_id=${CLIENT_ID}"
-	final String TWITCH_STREAM_API = "https://api.twitch.tv/kraken/streams/%s?client_id=${CLIENT_ID}"
+	final String TWITCH_STREAM_API = "https://api.twitch.tv/helix/streams?user_login=%s"
+	final def reqProps = [ 'Authorization': 'Bearer ' + OAUTH_TOKEN, 'Client-Id': CLIENT_ID_API ]
+	final String TWITCH_GQL_LIVE_ACCESS_TOKEN_PAYLOAD = JsonOutput.toJson([
+		"operationName":"PlaybackAccessToken_Template",
+		"query":"query PlaybackAccessToken_Template(\$login: String!, \$isLive: Boolean!, \$vodID: ID!, \$isVod: Boolean!, \$playerType: String!) {  streamPlaybackAccessToken(channelName: \$login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: \$playerType}) @include(if: \$isLive) {    value    signature    __typename  }  videoPlaybackAccessToken(id: \$vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: \$playerType}) @include(if: \$isVod) {    value    signature    __typename  }}",
+		"variables":[
+			"isLive":true,
+			"login":"%s",
+			"isVod":false,
+			"vodID":"",
+			"playerType":"site"
+		]
+	])
+	final String TWITCH_GQL_VOD_ACCESS_TOKEN_PAYLOAD = JsonOutput.toJson([
+		"operationName":"PlaybackAccessToken_Template",
+		"query":"query PlaybackAccessToken_Template(\$login: String!, \$isLive: Boolean!, \$vodID: ID!, \$isVod: Boolean!, \$playerType: String!) {  streamPlaybackAccessToken(channelName: \$login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: \$playerType}) @include(if: \$isLive) {    value    signature    __typename  }  videoPlaybackAccessToken(id: \$vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: \$playerType}) @include(if: \$isVod) {    value    signature    __typename  }}",
+		"variables":[
+			"isLive":false,
+			"login":"",
+			"isVod":true,
+			"vodID":"%s",
+			"playerType":"site"
+		]
+	])
+
 
 	int getVersion() {
 		return VERSION
@@ -89,14 +102,8 @@ class Twitch extends WebResourceUrlExtractor {
 		def items, title
 		def channelName = (String) (resourceUrl =~ VALID_FEED_URL)[0][1] // extract channel name from url
 		
-		if(resourceUrl ==~ VALID_VOD_URL) {
-			def urlKind = (resourceUrl =~ VALID_VOD_URL)[0][2] // "b" or "c"
-			def vodId
-			vodId = (resourceUrl =~ VALID_VOD_URL)[0][3] as Integer
-			title = "${channelName} VOD ${vodId}"
-			items = extractVods(vodId, urlKind)
-		} else if(resourceUrl ==~ VALID_HLS_VOD_URL) {
-			def vodId = (resourceUrl =~ VALID_HLS_VOD_URL)[0][2] as Integer
+		if(resourceUrl ==~ VALID_HLS_VOD_URL) {
+			def vodId = (resourceUrl =~ VALID_HLS_VOD_URL)[0][1] as Integer
 			title = "${channelName} VOD ${vodId}"
 			items = extractHlsVods(vodId)
 		} else if(resourceUrl ==~ VALID_FEED_URL) { // it's a stream
@@ -113,15 +120,26 @@ class Twitch extends WebResourceUrlExtractor {
 	}
 	
 	List<WebResourceItem> extractHlsVods(Integer vodId) {
-		def info = new JsonSlurper().parseText(new URL(String.format(TWITCH_VOD_API_INFO, "v", vodId)).text)
-		def vodTitle = info.title
-		def preview = info.preview
+		def info = new JsonSlurper().parseText(new URL(String.format(TWITCH_VOD_API_INFO, vodId)).getText(requestProperties: reqProps))
+		def vodTitle = info.data[0].title
+		def preview = info.data[0].thumbnail_url.replace('%{width}', '1920').replace('%{height}', '1080')
 		
-		def auth = new JsonSlurper().parseText(new URL(String.format(TWITCH_HLSVOD_ACCESSTOKEN_API, vodId)).text)
+		// grab auth token
+		def message = String.format(TWITCH_GQL_VOD_ACCESS_TOKEN_PAYLOAD, vodId)
+		def conn = new URL(TWITCH_GQL_API).openConnection()
+		conn.setRequestMethod("POST")
+		conn.setRequestProperty('Client-ID', CLIENT_ID)
+		conn.setRequestProperty('User-Agent', 'curl/7.68.0')
+		conn.setRequestProperty('Authorization', "Bearer ${OAUTH_TOKEN}")
+		conn.setDoOutput(true)
+		conn.getOutputStream().write(message.getBytes("UTF-8"))
 		
-		def playlist = new URL(String.format(TWITCH_HLS_VOD_API_URL, vodId, URLEncoder.encode(auth.token), URLEncoder.encode(auth.sig))).text
+		def t = conn.getInputStream().getText()
+		def auth = new JsonSlurper().parseText(t)
 		
-		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
+		def playlist = new URL(String.format(TWITCH_HLS_VOD_API_URL, vodId, URLEncoder.encode(auth.data.videoPlaybackAccessToken.signature), URLEncoder.encode(auth.data.videoPlaybackAccessToken.value))).text
+		
+		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(https?:\/\/.+?)[\n\r]/
 		
 		def items = []
 		while(m.find()) {
@@ -173,18 +191,29 @@ class Twitch extends WebResourceUrlExtractor {
 	List<WebResourceItem> extractHlsStream(String channelName) {
 		def items = [] // prepare list
 		
-		def auth = new JsonSlurper().parseText(new URL(String.format(TWITCH_ACCESSTOKEN_API, channelName.toLowerCase())).text)
+		// grab auth token
+		def message = String.format(TWITCH_GQL_LIVE_ACCESS_TOKEN_PAYLOAD, channelName)
+		def conn = new URL(TWITCH_GQL_API).openConnection()
+		conn.setRequestMethod("POST")
+		conn.setRequestProperty('Client-ID', CLIENT_ID)
+		conn.setRequestProperty('User-Agent', 'curl/7.68.0')
+		conn.setRequestProperty('Authorization', "Bearer ${OAUTH_TOKEN}")
+		conn.setDoOutput(true)
+		conn.getOutputStream().write(message.getBytes("UTF-8"))
+		
+		def t = conn.getInputStream().getText()
+		def auth = new JsonSlurper().parseText(t)
 		
 		//getting stream thubnail
-		def streamJson = new JsonSlurper().parseText(new URL(String.format(TWITCH_STREAM_API, channelName.toLowerCase())).text)
+		def streamJson = new JsonSlurper().parseText(new URL(String.format(TWITCH_STREAM_API, channelName.toLowerCase())).getText(requestProperties: reqProps))
 		def thumbnailUrl
 		if (streamJson.stream) {
 			thumbnailUrl = streamJson.stream.preview.medium
 		}
 		
-		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), URLEncoder.encode(auth.sig), URLEncoder.encode(auth.token))).text
+		def playlist = new URL(String.format(TWITCH_HLS_API_PLAYLIST_URL, channelName.toLowerCase(), auth.data.streamPlaybackAccessToken.signature, auth.data.streamPlaybackAccessToken.value)).text
 		
-		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(http:\/\/.+?)[\n\r]/
+		def m = playlist =~ /(?s)NAME="([^"]*)".*?BANDWIDTH=(\d+).*?(https?:\/\/.+?)[\n\r]/
 		
 		while(m.find()) {
 			// a generic string should be enough for identifying purposes
